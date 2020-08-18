@@ -60,7 +60,7 @@ func (b *Watch) SetDev(dev string) *Watch {
 }
 
 //Watch 监控网卡
-func (b *Watch) Watch(f func(src string, dst string)) error {
+func (b *Watch) Watch(f func(src string, dst string) (over bool)) error {
 	var err error
 	if b.handle, err = pcap.OpenLive(b.dev, b.snapshotLen, b.promiscuous, b.timeout); err != nil {
 		return err
@@ -74,6 +74,7 @@ func (b *Watch) Watch(f func(src string, dst string)) error {
 	defer b.handle.Close()
 	//获取数据源头包
 	packetSource := gopacket.NewPacketSource(b.handle, b.handle.LinkType())
+LOOP:
 	for packet := range packetSource.Packets() {
 		netLayer := packet.NetworkLayer()
 		if netLayer != nil {
@@ -85,7 +86,10 @@ func (b *Watch) Watch(f func(src string, dst string)) error {
 				tcpLayer := packet.Layer(layers.LayerTypeTCP)
 				if tcpLayer != nil {
 					tcp, _ := tcpLayer.(*layers.TCP)
-					f(fmt.Sprintf("%s:%v", srcIP, tcp.SrcPort), fmt.Sprintf("%s:%v", dstIP, tcp.DstPort))
+					o := f(fmt.Sprintf("%s:%v", srcIP, tcp.SrcPort), fmt.Sprintf("%s:%v", dstIP, tcp.DstPort))
+					if o {
+						break LOOP
+					}
 				}
 			}
 		}
